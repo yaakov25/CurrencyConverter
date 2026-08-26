@@ -18,42 +18,37 @@
 <style>
   :root{
     --bg:#0C1418;
-    --surface:#111E23;
+    --card:#121E23;
+    --card-hi:#18272E;
     --edge:#1E3037;
     --paper:#F2EFE6;
     --muted:#6E8189;
     --ochre:#E9B44C;
     --mint:#7FC7A8;
     --rust:#C87D5A;
-    --pad-x:clamp(18px,5vw,28px);
+    --pad-x:clamp(14px,4.2vw,22px);
+    --row-r:18px;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
   body{
-    background:var(--bg);
-    color:var(--paper);
+    background:var(--bg);color:var(--paper);
     font-family:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
     font-variant-numeric:tabular-nums;
-    overflow:hidden;
     overscroll-behavior:none;
     -webkit-user-select:none;user-select:none;
   }
   button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
-  :focus-visible{outline:2px solid var(--ochre);outline-offset:2px;border-radius:4px}
+  :focus-visible{outline:2px solid var(--ochre);outline-offset:2px;border-radius:6px}
 
-  #app{
-    display:flex;flex-direction:column;height:100dvh;
-    padding-top:env(safe-area-inset-top);
-    padding-bottom:env(safe-area-inset-bottom);
-  }
+  #app{display:flex;flex-direction:column;height:100dvh;padding-top:env(safe-area-inset-top)}
 
-  /* ---- status eyebrow ---- */
+  /* ---------- eyebrow ---------- */
   .eyebrow{
     display:flex;align-items:center;justify-content:space-between;gap:12px;
-    padding:14px var(--pad-x) 12px;
-    font-size:11px;letter-spacing:.14em;text-transform:uppercase;
-    font-stretch:112%;font-weight:600;color:var(--muted);
-    border-bottom:1px solid var(--edge);
+    padding:12px var(--pad-x) 10px;
+    font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    font-stretch:112%;font-weight:600;color:var(--muted);flex:none;
   }
   .status{display:flex;align-items:center;gap:7px}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
@@ -62,107 +57,107 @@
   .dot.loading{background:var(--ochre);animation:pulse 1.1s ease-in-out infinite}
   @keyframes pulse{50%{opacity:.25}}
 
-  /* ---- the two rows ---- */
-  .board{flex:1;display:flex;flex-direction:column;justify-content:center;position:relative;min-height:0}
-  .row{
-    padding:min(3.2vh,26px) var(--pad-x);
-    display:flex;flex-direction:column;gap:6px;
-    transition:opacity .18s ease;
+  /* ---------- flag + code chip ---------- */
+  .flag{
+    width:36px;height:36px;flex:none;border-radius:50%;overflow:hidden;
+    display:grid;place-items:center;background:var(--card-hi);
+    font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
+    font-size:26px;line-height:1;
   }
-  .row .head{display:flex;align-items:baseline;gap:10px}
-  .code{
-    font-size:15px;font-weight:800;letter-spacing:.1em;font-stretch:118%;
-    padding:3px 0;border-bottom:2px solid transparent;
-  }
-  .row.on .code{border-bottom-color:var(--ochre)}
-  .name{
-    font-size:12px;color:var(--muted);font-weight:500;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
-  .value{
-    font-size:clamp(34px,12.5vw,56px);
-    line-height:1.04;font-weight:700;font-stretch:118%;
-    word-break:break-all;
-  }
-  .row.off .value{color:var(--muted);font-weight:600}
-  .row.on .value{color:var(--paper)}
-  .caret{
-    display:inline-block;width:2px;height:.86em;margin-left:3px;
-    background:var(--ochre);vertical-align:-.06em;
-  }
-  .row.on .caret{animation:blink 1.1s steps(1) infinite}
-  @keyframes blink{50%{opacity:0}}
-  .row.off .caret{display:none}
+  .flag span{transform:scale(1.55);display:block}
+  .ident{display:flex;align-items:center;gap:11px;min-width:0}
+  .cw{display:flex;align-items:baseline;gap:6px}
+  .code{font-size:17px;font-weight:800;letter-spacing:.06em;font-stretch:115%}
+  .sym{font-size:12px;color:var(--muted);font-weight:600}
+  .chev{color:var(--muted);font-size:11px;margin-left:1px;transform:translateY(1px)}
 
-  /* ---- divider with swap ---- */
-  .divider{
-    display:flex;align-items:center;gap:14px;
-    padding:0 var(--pad-x);
+  /* ---------- base card ---------- */
+  .base{
+    margin:0 var(--pad-x) 12px;padding:14px 16px 15px;
+    background:var(--card);border-radius:22px;border:1px solid transparent;
+    flex:none;transition:border-color .15s, background .15s;
   }
-  .rule{flex:1;height:1px;background:var(--edge)}
-  .swap{
-    width:46px;height:46px;flex:none;border-radius:50%;
-    border:1px solid var(--edge);background:var(--surface);
-    display:grid;place-items:center;font-size:19px;color:var(--ochre);
-    transition:transform .28s cubic-bezier(.4,1.4,.5,1);
+  .base.drop{border-color:var(--ochre);background:var(--card-hi)}
+  .base .lbl{
+    font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);font-weight:600;font-stretch:112%;margin-bottom:9px;
   }
-  .swap:active{transform:rotate(180deg)}
-  .rate{
-    padding:0 var(--pad-x);margin-top:min(2.4vh,18px);
-    font-size:12px;letter-spacing:.05em;color:var(--muted);
-    font-stretch:100%;font-weight:500;
+  .base .line{display:flex;align-items:center;gap:12px}
+  .base .ident{flex:none}
+  #amount{
+    flex:1;min-width:0;background:none;border:none;outline:none;
+    text-align:right;color:var(--paper);
+    font-family:inherit;font-size:clamp(26px,8vw,36px);font-weight:700;font-stretch:115%;
+    font-variant-numeric:tabular-nums;padding:0;
+    -webkit-user-select:text;user-select:text;
   }
-  .rate b{color:var(--paper);font-weight:600}
 
-  /* ---- keypad ---- */
-  .pad{
-    display:grid;grid-template-columns:repeat(3,1fr);
-    border-top:1px solid var(--edge);
-    background:var(--edge);gap:1px;
-    flex:none;
+  /* ---------- list ---------- */
+  .list{
+    flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:0 var(--pad-x) calc(24px + env(safe-area-inset-bottom));
+    touch-action:pan-y;position:relative;
   }
-  .pad button{
-    background:var(--bg);
-    height:min(9.2vh,74px);
-    font-size:24px;font-weight:600;font-stretch:110%;
-    display:grid;place-items:center;
-    transition:background .1s;
+  .list.dragging{overflow:hidden;touch-action:none}
+  .item{
+    display:flex;align-items:center;gap:12px;
+    background:var(--card);border-radius:var(--row-r);
+    padding:13px 16px;margin-bottom:9px;
+    will-change:transform;
   }
-  .pad button:active{background:var(--surface)}
-  .pad button.util{color:var(--ochre);font-size:19px;font-weight:700}
+  .item.shift{transition:transform .16s cubic-bezier(.3,.9,.3,1)}
+  .item.lift{
+    position:relative;z-index:5;background:var(--card-hi);
+    box-shadow:0 14px 30px rgba(0,0,0,.55);
+    transform-origin:center;
+  }
+  .item .nums{margin-left:auto;text-align:right;min-width:0}
+  .item .val{font-size:24px;font-weight:700;font-stretch:112%;line-height:1.15}
+  .item .sub{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:3px;white-space:nowrap}
+  .add{
+    display:flex;align-items:center;justify-content:center;gap:9px;width:100%;
+    border:1px dashed var(--edge);border-radius:var(--row-r);
+    padding:15px;color:var(--muted);font-size:13.5px;font-weight:600;
+    letter-spacing:.03em;
+  }
+  .add:active{background:var(--card)}
+  .hint{
+    text-align:center;color:var(--muted);font-size:11px;
+    padding:14px 0 4px;letter-spacing:.03em;line-height:1.5;
+  }
 
-  /* ---- currency picker ---- */
+  /* ---------- picker sheet ---------- */
   .sheet{
-    position:fixed;inset:0;background:var(--bg);z-index:20;
-    display:flex;flex-direction:column;
-    padding-top:env(safe-area-inset-top);
+    position:fixed;inset:0;background:var(--bg);z-index:30;
+    display:flex;flex-direction:column;padding-top:env(safe-area-inset-top);
     transform:translateY(100%);transition:transform .26s cubic-bezier(.3,.9,.3,1);
     visibility:hidden;
   }
   .sheet.open{transform:none;visibility:visible}
-  .sheet header{
-    display:flex;align-items:center;gap:12px;
-    padding:12px var(--pad-x);border-bottom:1px solid var(--edge);
-  }
+  .sheet header{display:flex;align-items:center;gap:12px;padding:12px var(--pad-x);border-bottom:1px solid var(--edge)}
   .sheet input{
-    flex:1;background:var(--surface);border:1px solid var(--edge);border-radius:10px;
+    flex:1;background:var(--card);border:1px solid var(--edge);border-radius:12px;
     padding:11px 13px;color:var(--paper);font:inherit;font-size:16px;
     -webkit-user-select:text;user-select:text;
   }
   .sheet input::placeholder{color:var(--muted)}
   .sheet .close{color:var(--ochre);font-size:14px;font-weight:700;padding:6px 2px}
-  .list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:24px}
-  .list button{
-    display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;
-    padding:15px var(--pad-x);border-bottom:1px solid var(--edge);
+  .picklist{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px var(--pad-x) 20px}
+  .picklist button{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    padding:11px 6px;border-bottom:1px solid var(--edge);
   }
-  .list .c{font-weight:800;font-stretch:118%;letter-spacing:.08em;min-width:52px;font-size:14px}
-  .list .n{color:var(--muted);font-size:14px}
-  .list button[aria-current="true"] .c{color:var(--ochre)}
+  .picklist .n{color:var(--muted);font-size:13px;margin-left:auto;text-align:right}
+  .picklist button[data-used="1"]{opacity:.42}
+  .picklist button[aria-current="true"] .code{color:var(--ochre)}
+  .remove{
+    margin:16px var(--pad-x) calc(20px + env(safe-area-inset-bottom));
+    padding:15px;border-radius:var(--row-r);border:1px solid var(--edge);
+    color:var(--rust);font-weight:700;font-size:14px;width:calc(100% - 2*var(--pad-x));
+  }
+  .remove[hidden]{display:none}
 
-  @media (prefers-reduced-motion:reduce){
-    *{animation:none!important;transition:none!important}
-  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -173,39 +168,19 @@
     <span class="status"><span class="dot loading" id="dot"></span><span id="stamp">lädt…</span></span>
   </div>
 
-  <main class="board">
-    <div class="row on" id="rowFrom">
-      <div class="head">
-        <button class="code" id="codeFrom">CHF</button>
-        <span class="name" id="nameFrom">Schweizer Franken</span>
-      </div>
-      <div class="value" id="valFrom" role="button" tabindex="0">1<span class="caret"></span></div>
+  <section class="base" id="base">
+    <div class="lbl">Umrechnen</div>
+    <div class="line">
+      <button class="ident" id="baseIdent">
+        <span class="flag" id="baseFlag"><span>🇨🇭</span></span>
+        <span class="cw"><span class="code" id="baseCode">CHF</span><span class="sym" id="baseSym">Fr.</span><span class="chev">▾</span></span>
+      </button>
+      <input id="amount" type="text" inputmode="decimal" enterkeyhint="done"
+             autocomplete="off" autocorrect="off" spellcheck="false" value="1">
     </div>
+  </section>
 
-    <div class="divider">
-      <span class="rule"></span>
-      <button class="swap" id="swap" aria-label="Währungen tauschen">⇅</button>
-      <span class="rule"></span>
-    </div>
-
-    <div class="row off" id="rowTo">
-      <div class="head">
-        <button class="code" id="codeTo">EUR</button>
-        <span class="name" id="nameTo">Euro</span>
-      </div>
-      <div class="value" id="valTo" role="button" tabindex="0" aria-live="polite">–<span class="caret"></span></div>
-    </div>
-
-    <p class="rate" id="rate">&nbsp;</p>
-  </main>
-
-  <div class="pad" id="pad">
-    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
-    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
-    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
-    <button data-k=".">.</button><button data-k="0">0</button>
-    <button data-k="back" class="util" aria-label="Löschen">⌫</button>
-  </div>
+  <div class="list" id="list"></div>
 </div>
 
 <section class="sheet" id="sheet" aria-hidden="true">
@@ -213,7 +188,8 @@
     <input id="search" type="search" placeholder="Währung suchen" autocomplete="off" autocorrect="off" spellcheck="false">
     <button class="close" id="closeSheet">Fertig</button>
   </header>
-  <div class="list" id="list"></div>
+  <div class="picklist" id="picklist"></div>
+  <button class="remove" id="removeCur" hidden>Aus Liste entfernen</button>
 </section>
 
 <script src="./app.js"></script>

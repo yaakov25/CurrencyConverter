@@ -1,5 +1,5 @@
 /* Bump CACHE after you edit any file, otherwise the phone keeps the old version. */
-const CACHE = 'kurs-v1';
+const CACHE = 'kurs-v2';
 const SHELL = [
   './',
   './index.html',
