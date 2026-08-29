@@ -2,10 +2,19 @@
    Kurse: EZB-Referenzkurse via Frankfurter, https://api.frankfurter.dev
    Alles wird in localStorage zwischengespeichert; die App rechnet auch offline. */
 
+// ── Live-Kurse (optional) ────────────────────────────────────────────────
+// Leer lassen = die App läuft wie bisher rein mit EZB-Tageskursen.
+// Sonst die URL des Cloudflare Workers eintragen, z. B.
+//   const LIVE_URL = 'https://kurs-proxy.dein-name.workers.dev';
+const LIVE_URL = 'https://steep-tooth-e287.yaakov-56b.workers.dev';
+const LIVE_BUDGET = 700;                         // Aufrufe/Tag, Sicherheitsnetz
+// ─────────────────────────────────────────────────────────────────────────
+
 const API = 'https://api.frankfurter.dev/v1';
 const FIRST_DAY = '1999-01-04';                 // frühestes EZB-Datum bei Frankfurter
-const KEY = { rates:'kurs.rates', names:'kurs.names', ui:'kurs.ui3', sIdx:'kurs.sIdx' };
-const MAX_AGE = 60 * 60 * 1000;
+const KEY = { rates:'kurs.rates', names:'kurs.names', ui:'kurs.ui3', sIdx:'kurs.sIdx', budget:'kurs.budget' };
+const MAX_AGE = 60 * 60 * 1000;                  // nur noch für Verlaufsdaten
+const OPEN_GAP = 90 * 1000;                      // "App neu geöffnet" ab dieser Pause
 const SERIES_CACHE = 6;                          // wie viele Paare wir vorhalten
 
 const FLAG = {
@@ -55,7 +64,8 @@ const state = {
   raw: saved.raw || '1',
   range: saved.range || '1M',
   tab: 'calc',
-  table:null, date:null, fetchedAt:0,
+  table:null, date:null, fetchedAt:0, src:'ecb', liveTs:0,
+  hiddenAt:0, busy:false,
   names: load(KEY.names) || {},
   pick:null,
   series:null, seriesPair:null, seriesLoading:false, seriesError:false,
@@ -105,21 +115,73 @@ function useCache(){
   const c = load(KEY.rates);
   if (!c || !c.table) return false;
   state.table = c.table; state.date = c.date; state.fetchedAt = c.fetchedAt || 0;
+  state.src = c.src || 'ecb'; state.liveTs = c.liveTs || 0;
   return true;
 }
-async function refresh(force = false){
-  if (state.table && Date.now() - state.fetchedAt < MAX_AGE && !force) return;
+function storeRates(){
+  save(KEY.rates, { table:state.table, date:state.date, fetchedAt:state.fetchedAt,
+                    src:state.src, liveTs:state.liveTs });
+}
+
+// Tagesbudget, damit eine Schleife nicht das Monatskontingent frisst
+function budgetLeft(){
+  const today = new Date().toISOString().slice(0,10);
+  const b = load(KEY.budget);
+  if (!b || b.day !== today){ save(KEY.budget, { day:today, n:0 }); return LIVE_BUDGET; }
+  return LIVE_BUDGET - b.n;
+}
+function budgetSpend(n){
+  const today = new Date().toISOString().slice(0,10);
+  const b = load(KEY.budget) || { day:today, n:0 };
+  if (b.day !== today){ b.day = today; b.n = 0; }
+  b.n += n; save(KEY.budget, b);
+}
+
+// EZB-Tageskurse: Rückfallebene und Quelle für den Verlauf
+async function fetchECB(){
+  const r = await fetch(`${API}/latest`, { cache:'no-store' });
+  if (!r.ok) throw new Error(r.status);
+  const d = await r.json();
+  state.table = { ...d.rates, EUR:1 };
+  state.date = d.date;
+  state.src = 'ecb'; state.liveTs = 0;
+  state.fetchedAt = Date.now();
+  storeRates();
+}
+
+// Live-Kurse über den Worker; die Tabelle ist dann basis-relativ (Basis = 1)
+async function fetchLive(){
+  const want = [state.base, ...state.targets];
+  const syms = want.filter((c) => c !== state.base);
+  if (!syms.length) throw new Error('no symbols');
+  if (budgetLeft() < syms.length) throw new Error('budget');
+  const r = await fetch(`${LIVE_URL}/?base=${state.base}&symbols=${syms.join(',')}`,
+                        { cache:'no-store' });
+  budgetSpend(syms.length);
+  if (!r.ok) throw new Error(r.status);
+  const d = await r.json();
+  if (!d.rates || !Object.keys(d.rates).length) throw new Error('empty');
+  state.table = { [d.base]: 1, ...d.rates };
+  state.src = 'live'; state.liveTs = d.ts || Date.now();
+  state.fetchedAt = Date.now();
+  storeRates();
+}
+
+// Nur beim Öffnen der App und beim Ziehen — sonst nie.
+async function refresh(){
+  if (state.busy) return;
+  state.busy = true;
   setDot('loading');
   try{
-    const r = await fetch(`${API}/latest`, { cache:'no-store' });
-    if (!r.ok) throw new Error(r.status);
-    const d = await r.json();
-    state.table = { ...d.rates, EUR:1 };
-    state.date = d.date;
-    state.fetchedAt = Date.now();
-    save(KEY.rates, { table:state.table, date:state.date, fetchedAt:state.fetchedAt });
+    if (LIVE_URL){
+      try{ await fetchLive(); }
+      catch{ await fetchECB(); }                 // Live weg? Dann EZB.
+    }else{
+      await fetchECB();
+    }
     if (!Object.keys(state.names).length) loadNames();
   }catch{ /* Cache behalten */ }
+  state.busy = false;
   render();
 }
 async function loadNames(){
@@ -163,15 +225,30 @@ function render(){
   + `<button class="add" id="addCur">＋ Währung hinzufügen</button>
      <p class="hint">Zeile lange drücken und ziehen zum Sortieren.<br>Nach oben auf die Karte ziehen macht sie zur Basis.</p>`;
 
-  if (state.table && has(state.base)){
-    el.stamp.textContent = fmtDate(state.date);
-    setDot((Date.now() - new Date(state.date+'T00:00:00').getTime())/864e5 > 4 ? 'stale' : 'live');
-  }else{
-    el.stamp.textContent = 'keine Kurse';
-    setDot('stale');
-  }
+  drawStamp();
   persist();
   if (state.tab === 'chart') syncChart();
+}
+
+function ago(ms){
+  const m = Math.round((Date.now() - ms) / 60000);
+  if (m < 1) return 'gerade eben';
+  if (m < 60) return `vor ${m} Min`;
+  const h = Math.round(m/60);
+  return h < 24 ? `vor ${h} Std` : `vor ${Math.round(h/24)} Tg`;
+}
+function drawStamp(){
+  if (!state.table || !has(state.base)){
+    el.stamp.textContent = 'keine Kurse'; setDot('stale'); return;
+  }
+  if (state.src === 'live'){
+    const mins = (Date.now() - state.liveTs) / 60000;
+    el.stamp.textContent = 'Live · ' + ago(state.liveTs);
+    setDot(mins > 180 ? 'stale' : 'live');
+  }else{
+    el.stamp.textContent = (LIVE_URL ? 'EZB · ' : '') + fmtDate(state.date);
+    setDot((Date.now() - new Date(state.date+'T00:00:00').getTime())/864e5 > 4 ? 'stale' : 'live');
+  }
 }
 
 function renderValuesOnly(){
@@ -209,6 +286,7 @@ function promote(code){
   state.raw = String(Math.round(carried * 1e4) / 1e4);
   el.amount.value = fmtTyped(state.raw);
   render();
+  if (LIVE_URL) refresh();          // neue Basis -> neue Live-Tabelle
 }
 
 // ---------- Drag & Drop ----------
@@ -316,7 +394,7 @@ function endPull(){
   el.puller.style.height = '0px';
   if (!fire) return;
   if (navigator.vibrate) navigator.vibrate(10);
-  refresh(true);
+  refresh();
   if (state.tab === 'chart') loadSeries(true);
 }
 el.list.addEventListener('touchend', endPull, { passive:true });
@@ -577,6 +655,7 @@ el.picklist.addEventListener('click', (e) => {
   }
   closeSheet();
   render();
+  if (LIVE_URL) refresh();          // Live-Tabelle deckt nur Basis + Liste ab
 });
 el.removeCur.addEventListener('click', () => {
   const i = state.targets.indexOf(state.pick.code);
@@ -597,8 +676,12 @@ drawRanges();
 render();
 refresh();
 if (!Object.keys(state.names).length) loadNames();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
-window.addEventListener('online', () => refresh(true));
+// Aktualisiert wird nur beim Öffnen der App und beim Ziehen — nicht periodisch.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden){ state.hiddenAt = Date.now(); return; }
+  if (state.hiddenAt && Date.now() - state.hiddenAt > OPEN_GAP) refresh();  // echtes Wiederöffnen
+  else drawStamp();                                        // kurz weggetippt: nur Alter neu
+});
 if ('serviceWorker' in navigator){
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }

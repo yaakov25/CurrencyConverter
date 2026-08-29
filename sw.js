@@ -1,5 +1,5 @@
 /* Bump CACHE after you edit any file, otherwise the phone keeps the old version. */
-const CACHE = 'kurs-v3';
+const CACHE = 'kurs-v4';
 const SHELL = [
   './',
   './index.html',
@@ -28,6 +28,7 @@ self.addEventListener('fetch', (e) => {
 
   // Rates always come from the network; app.js falls back to localStorage when offline.
   if (url.hostname === 'api.frankfurter.dev') return;
+  if (url.hostname.endsWith('workers.dev')) return;      // Live-Kurse nie cachen
 
   // Fonts: cache on first use so the app looks right offline.
   if (url.hostname.endsWith('gstatic.com') || url.hostname.endsWith('googleapis.com')) {

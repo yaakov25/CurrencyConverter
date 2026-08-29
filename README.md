@@ -72,3 +72,36 @@ die alte Fassung aus.
 | `sw.js` | Service Worker, Offline-Cache |
 | `manifest.webmanifest` | Name, Icon, Vollbild-Modus |
 | `icon-*.png`, `apple-touch-icon.png` | Icons |
+
+---
+
+## Optional: Live-Kurse statt EZB-Tageskurse
+
+Standardmässig läuft die App mit EZB-Referenzkursen (einmal pro Werktag). Wer
+marktnahe Kurse braucht, kann Twelve Data dazuschalten. Der API-Key darf **nicht**
+ins öffentliche Repo — dafür gibt es den Worker in `worker/worker.js`.
+
+1. **twelvedata.com** → kostenloser Basic-Plan → API-Key kopieren.
+2. **dash.cloudflare.com** → Compute (Workers) → Create → Hello World →
+   Inhalt von `worker/worker.js` einfügen → Deploy.
+3. Worker → Settings → Variables and Secrets → Add → **Secret**,
+   Name `TD_KEY`, Wert = der Twelve-Data-Key.
+4. In `worker.js` die Liste `ALLOW` prüfen (dort steht die GitHub-Pages-Domain).
+5. In `app.js` ganz oben `LIVE_URL` auf die `*.workers.dev`-Adresse setzen,
+   `CACHE` in `sw.js` hochzählen, committen.
+
+Bleibt `LIVE_URL` leer, ändert sich nichts — die App läuft wie zuvor.
+
+**Wann aktualisiert wird:** ausschliesslich beim Öffnen der App (nach mehr als
+90 Sekunden im Hintergrund) und beim Ziehen nach unten. Kein Polling, kein
+Timer. Zusätzlich beim Wechsel der Basiswährung oder der Liste, weil die
+Live-Tabelle nur Basis + Zielwährungen abdeckt.
+
+**Budget:** 1 Credit pro Zielwährung und Abruf. Bei 4 Währungen und 20 Starts
+am Tag sind das 80 von 800 Credits. `LIVE_BUDGET` in `app.js` deckelt es bei
+700/Tag, damit eine Fehlerschleife das Kontingent nicht leerräumt.
+
+**Rückfallebene:** Antwortet der Worker nicht oder ist das Budget aufgebraucht,
+holt die App automatisch die EZB-Kurse. Die Kopfzeile zeigt dann `EZB · Datum`
+statt `Live · vor X Min`. Der Verlaufs-Tab nutzt immer Frankfurter, da
+historische Daten bei den Live-Anbietern kostenpflichtig sind.
