@@ -27,6 +27,52 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
 
     const url = new URL(request.url);
+
+    // ?series=1&base=CHF&symbol=EUR&interval=5min&outputsize=288
+    // Intraday-Kerzen. Zeiten kommen direkt in Europe/Zurich zurück,
+    // damit die App nicht raten muss, in welcher Zone die Daten stehen.
+    if (url.searchParams.has('series')){
+      const b1 = (url.searchParams.get('base') || 'CHF').toUpperCase().slice(0,3);
+      const b2 = (url.searchParams.get('symbol') || 'EUR').toUpperCase().slice(0,3);
+      const iv = ['1min','5min','15min','30min','1h'].includes(url.searchParams.get('interval'))
+        ? url.searchParams.get('interval') : '5min';
+      const n  = Math.min(500, Math.max(10, parseInt(url.searchParams.get('outputsize') || '288', 10)));
+      if (!/^[A-Z]{3}$/.test(b1) || !/^[A-Z]{3}$/.test(b2) || b1 === b2){
+        return json({ error: 'bad request' }, 400, cors);
+      }
+      const api2 = `https://api.twelvedata.com/time_series?symbol=${b1}/${b2}`
+        + `&interval=${iv}&outputsize=${n}&timezone=Europe/Zurich&apikey=${env.TD_KEY}`;
+      let up2;
+      try{ up2 = await fetch(api2); }catch{ return json({ error: 'upstream unreachable' }, 502, cors); }
+      const raw2 = await up2.text();
+      let s2 = null;
+      try{ s2 = JSON.parse(raw2); }catch{}
+      if (!up2.ok || !s2 || s2.status === 'error' || !Array.isArray(s2.values)){
+        return json({ error: 'upstream ' + up2.status,
+                      upstream_meldung: (s2 && (s2.message || s2.error)) || raw2.slice(0,200) }, 502, cors);
+      }
+      // Twelve Data liefert neueste zuerst — wir drehen auf chronologisch.
+      const t = [], v = [];
+      for (const row of s2.values.slice().reverse()){
+        const num = parseFloat(row.close);
+        if (row.datetime && !Number.isNaN(num)){ t.push(row.datetime); v.push(num); }
+      }
+      return json({ base:b1, symbol:b2, interval:iv, t, v, src:'live' }, 200, cors);
+    }
+
+    // ?health=1 — sagt, ob das Secret ankommt, ohne es zu verraten
+    if (url.searchParams.has('health')){
+      const k = env.TD_KEY;
+      return json({
+        secret_gefunden: !!k,
+        laenge: k ? k.length : 0,
+        sieht_sauber_aus: k ? k === k.trim() : false,
+        hinweis: !k ? 'Secret heisst nicht TD_KEY oder Worker wurde nach dem Anlegen nicht neu deployed'
+               : k !== k.trim() ? 'Der Wert hat Leerzeichen oder einen Zeilenumbruch am Rand'
+               : 'Secret sieht gut aus — falls trotzdem 401, stimmt der Key selbst nicht',
+      }, 200, cors);
+    }
+
     const base = (url.searchParams.get('base') || 'CHF').toUpperCase().slice(0, 3);
     const symbols = (url.searchParams.get('symbols') || 'EUR')
       .toUpperCase().split(',').map((s) => s.trim().slice(0, 3))
@@ -51,10 +97,20 @@ export default {
     } catch {
       return json({ error: 'upstream unreachable' }, 502, cors);
     }
-    if (!upstream.ok) return json({ error: 'upstream ' + upstream.status }, 502, cors);
+    // Twelve Data schickt den Grund im Body mit — den reichen wir durch,
+    // sonst rätselt man bei 401 zwischen Key, Secret-Name und Tippfehler.
+    const raw = await upstream.text();
+    let d = null;
+    try{ d = JSON.parse(raw); }catch{}
 
-    const d = await upstream.json();
-    if (d.status === 'error') return json({ error: d.message || 'api error' }, 502, cors);
+    if (!upstream.ok || (d && d.status === 'error')){
+      return json({
+        error: 'upstream ' + upstream.status,
+        upstream_meldung: (d && (d.message || d.error)) || raw.slice(0, 200),
+        key_vorhanden: !!env.TD_KEY,
+      }, 502, cors);
+    }
+    if (!d) return json({ error: 'upstream lieferte kein JSON' }, 502, cors);
 
     // Einzelnes Paar -> flaches Objekt; mehrere -> nach "CHF/EUR" verschlüsselt
     const rates = {};
