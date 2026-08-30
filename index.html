@@ -37,19 +37,17 @@
   /* ---------- top bar: tabs + status ---------- */
   .topbar{display:flex;align-items:center;gap:10px;padding:8px var(--pad-x) 10px;flex:none}
   .tabs{
-    display:flex;background:var(--card);border-radius:999px;padding:3px;gap:2px;margin:0 auto;
+    display:flex;background:var(--card);border-radius:999px;padding:3px;gap:2px;flex:none;
   }
   .tabs button{
-    padding:7px 18px;border-radius:999px;font-size:13.5px;font-weight:700;
+    padding:7px 15px;border-radius:999px;font-size:13.5px;font-weight:700;
     color:var(--muted);letter-spacing:.02em;transition:background .16s,color .16s;
   }
   .tabs button[aria-selected="true"]{background:var(--card-hi);color:var(--paper)}
   .status{
     display:flex;align-items:center;gap:6px;font-size:10.5px;letter-spacing:.04em;
-    font-weight:600;color:var(--muted);white-space:nowrap;
-    position:absolute;right:var(--pad-x);
+    font-weight:600;color:var(--muted);white-space:nowrap;margin-left:auto;
   }
-  .topbar{position:relative}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
   .dot.live{background:var(--up)} .dot.stale{background:var(--rust)}
   .dot.loading{background:var(--ochre);animation:pulse 1s ease-in-out infinite}
@@ -147,9 +145,13 @@
   }
   .readout b{color:var(--paper);font-weight:700}
   .hilo{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:8px}
+  .source{
+    font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    opacity:.65;margin-top:6px;text-align:center;
+  }
   .ranges{display:flex;gap:4px;margin-top:12px;background:var(--card);border-radius:999px;padding:3px}
   .ranges button{
-    flex:1;padding:8px 0;border-radius:999px;font-size:12px;font-weight:700;color:var(--muted);
+    flex:1;padding:8px 0;border-radius:999px;font-size:11.5px;font-weight:700;color:var(--muted);
     transition:background .14s,color .14s;
   }
   .ranges button[aria-selected="true"]{background:var(--card-hi);color:var(--ochre)}
@@ -221,6 +223,7 @@
       <div id="chartHead"></div>
       <div class="plot" id="plot"></div>
       <div class="hilo" id="hilo"></div>
+      <div class="source" id="source"></div>
       <div class="ranges" id="ranges" role="tablist"></div>
     </div>
   </div>

@@ -27,13 +27,22 @@ Währungsrechner mit Verlaufs-Charts für iPhone. Kurse: EZB-Referenzkurse über
 
 - Zeigt immer das Paar **Basis → erste Zeile der Liste**. Andere Kombination:
   im Rechner die Liste umsortieren.
-- Zeitraum: 1W / 1M / 3M / 1J / 5J / 10J / Alle (zurück bis 04.01.1999).
+- Zeitraum: 1T / 1W / 1M / 3M / 1J / 5J / 10J / Alle (zurück bis 04.01.1999).
+  **1T** erscheint nur, wenn `LIVE_URL` gesetzt ist.
 - Linie grün bei Anstieg, rot bei Rückgang; Prozentangabe bezieht sich auf den
   gewählten Zeitraum.
 - Finger auf den Chart legen und ziehen → Fadenkreuz mit Datum und Kurs.
 - Tief / Hoch stehen unter dem Chart.
-- **Kein Intraday**: die EZB publiziert genau einen Kurs pro Werktag, gegen
-  16:00 CET. Wochenenden und Feiertage fehlen in den Daten.
+- **Zwei Quellen, bewusst nicht vermischt.** `1T` zeichnet 5-Minuten-Kerzen von
+  Twelve Data; alle längeren Zeiträume zeichnen EZB-Tageskurse von Frankfurter.
+  Unter dem Chart steht, welche Quelle gerade gilt. Die beiden Reihen werden nie
+  in einer Linie kombiniert — sie stammen aus verschiedenen Feeds und stimmen an
+  der Nahtstelle nicht exakt überein.
+- Die EZB publiziert genau einen Kurs pro Werktag gegen 16:00 CET; Wochenenden
+  und Feiertage fehlen dort. Der Intraday-Feed läuft dagegen rund um die Uhr an
+  Handelstagen.
+- Intraday-Daten werden 5 Minuten zwischengespeichert und kosten 1 Credit pro
+  Abruf. Zeiten kommen bereits in Europe/Zurich vom Worker.
 
 ## Zahlenformat
 

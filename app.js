@@ -34,6 +34,7 @@ const flagChar = (c) => (FLAG[c] || '')
   .replace(/./g, (ch) => String.fromCodePoint(0x1F1E6 + ch.charCodeAt(0) - 65)) || '🏳';
 
 const RANGES = [
+  { id:'1T',  label:'1T',   days:null, intraday:true, interval:'5min', points:288 },
   { id:'1W',  label:'1W',   days:7 },
   { id:'1M',  label:'1M',   days:30 },
   { id:'3M',  label:'3M',   days:91 },
@@ -52,6 +53,7 @@ const el = {
   baseCode:$('baseCode'), baseSym:$('baseSym'), amount:$('amount'), reset:$('reset'),
   list:$('list'),
   chartHead:$('chartHead'), plot:$('plot'), hilo:$('hilo'), ranges:$('ranges'),
+  source:$('source'),
   sheet:$('sheet'), picklist:$('picklist'), search:$('search'),
   closeSheet:$('closeSheet'), removeCur:$('removeCur'),
 };
@@ -69,6 +71,7 @@ const state = {
   names: load(KEY.names) || {},
   pick:null,
   series:null, seriesPair:null, seriesLoading:false, seriesError:false,
+  intra:null, intraPair:null,
   cursor:null,
 };
 
@@ -109,6 +112,13 @@ function parseTyped(s){
 }
 const fmtDate = (iso) => new Date(iso + 'T00:00:00')
   .toLocaleDateString('de-CH',{ day:'2-digit', month:'2-digit', year:'numeric' });
+// "2026-08-29 18:35:00" -> "29.08. 18:35"  (Zeiten kommen bereits in CH-Zeit)
+const fmtStamp = (s) => {
+  const [dd, tt] = String(s).split(' ');
+  const [Y, M, D] = dd.split('-');
+  return tt ? `${D}.${M}. ${tt.slice(0,5)}` : fmtDate(dd);
+};
+const fmtAxis = (s, intra) => intra ? fmtStamp(s) : fmtDate(s);
 
 // ---------- Tageskurse ----------
 function useCache(){
@@ -395,7 +405,7 @@ function endPull(){
   if (!fire) return;
   if (navigator.vibrate) navigator.vibrate(10);
   refresh();
-  if (state.tab === 'chart') loadSeries(true);
+  if (state.tab === 'chart') isIntraday() ? loadIntraday(true) : loadSeries(true);
 }
 el.list.addEventListener('touchend', endPull, { passive:true });
 el.list.addEventListener('touchcancel', endPull, { passive:true });
@@ -454,14 +464,61 @@ async function loadSeries(force = false){
   drawChart();
 }
 
+const INTRA_TTL = 5 * 60 * 1000;
+const intraKey = (a,b) => `kurs.i.${a}${b}`;
+
+async function loadIntraday(force = false){
+  const a = state.base, b = state.targets[0];
+  if (!b || !LIVE_URL) return;
+  const pair = a + b;
+  const cached = load(intraKey(a,b));
+  if (!force && cached && Date.now() - cached.fetchedAt < INTRA_TTL){
+    state.intra = cached; state.intraPair = pair; return drawChart();
+  }
+  if (cached){ state.intra = cached; state.intraPair = pair; }
+  const r0 = RANGES.find((x) => x.id === '1T');
+  if (budgetLeft() < 1){ state.seriesError = !cached; return drawChart(); }
+
+  state.seriesLoading = true; state.seriesError = false;
+  if (!cached) drawChart();
+  try{
+    const r = await fetch(`${LIVE_URL}/?series=1&base=${a}&symbol=${b}`
+      + `&interval=${r0.interval}&outputsize=${r0.points}`, { cache:'no-store' });
+    budgetSpend(1);
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    if (!Array.isArray(d.v) || d.v.length < 2) throw new Error('empty');
+    const obj = { t:d.t, v:d.v, interval:d.interval, fetchedAt:Date.now() };
+    state.intra = obj; state.intraPair = pair;
+    save(intraKey(a,b), obj);
+  }catch{
+    state.seriesError = !state.intra || state.intraPair !== pair;
+  }
+  state.seriesLoading = false;
+  drawChart();
+}
+
+function isIntraday(){
+  const r = RANGES.find((x) => x.id === state.range);
+  return !!(r && r.intraday);
+}
+
 function syncChart(){
   const want = state.base + (state.targets[0] || '');
+  if (isIntraday()){
+    if (state.intraPair !== want){ state.intra = null; state.cursor = null; }
+    return loadIntraday();
+  }
   if (state.seriesPair !== want){ state.series = null; state.cursor = null; loadSeries(); }
   else drawChart();
 }
 
 // ---------- Verlauf: zeichnen ----------
 function slice(){
+  if (isIntraday()){
+    const i = state.intra;
+    return i && i.v && i.v.length > 1 ? { d:i.t, v:i.v, intra:true } : null;
+  }
   const s = state.series;
   if (!s || !s.d.length) return null;
   const r = RANGES.find((x) => x.id === state.range) || RANGES[1];
@@ -505,7 +562,7 @@ function drawChart(){
   if (!b){
     el.chartHead.innerHTML = '';
     el.plot.innerHTML = '<p class="cstate">Keine Zielwährung in der Liste.</p>';
-    el.hilo.innerHTML = ''; drawRanges(); return;
+    el.hilo.innerHTML = ''; el.source.textContent = ''; drawRanges(); return;
   }
   drawRanges();
 
@@ -515,7 +572,7 @@ function drawChart(){
     el.plot.innerHTML = `<p class="cstate">${
       state.seriesError ? 'Verlauf nicht geladen.<br>Ohne Verbindung nur mit gespeicherten Daten.'
       : state.seriesLoading ? 'Lädt Verlauf…' : 'Zu wenige Datenpunkte für diesen Zeitraum.'}</p>`;
-    el.hilo.innerHTML = ''; return;
+    el.hilo.innerHTML = ''; el.source.textContent = ''; return;
   }
 
   const box = el.plot.getBoundingClientRect();
@@ -552,11 +609,15 @@ function drawChart(){
 
   const live = has(b) && has(state.base) ? rateOf(state.base, b) : cut.v[cut.v.length-1];
   el.chartHead.innerHTML = chartHeadHTML(live, cut.v[0], cut.v[cut.v.length-1]);
+  const intra = !!cut.intra;
   el.hilo.innerHTML = `<span>Tief ${fmtRate(min)}</span>
-    <span>${fmtDate(cut.d[0])} – ${fmtDate(cut.d[cut.d.length-1])}</span>
+    <span>${fmtAxis(cut.d[0], intra)} – ${fmtAxis(cut.d[cut.d.length-1], intra)}</span>
     <span>Hoch ${fmtRate(max)}</span>`;
+  el.source.textContent = intra
+    ? `Twelve Data · ${(state.intra && state.intra.interval) || '5min'}`
+    : 'EZB-Tageskurse · Frankfurter';
 
-  wireCursor({ d, v, x, y, W });
+  wireCursor({ d, v, x, y, W, intra });
 }
 
 function wireCursor(ctx){
@@ -574,7 +635,7 @@ function wireCursor(ctx){
     g.style.display = '';
     line.setAttribute('x1', cx); line.setAttribute('x2', cx);
     dotC.setAttribute('cx', cx); dotC.setAttribute('cy', cy);
-    readout.innerHTML = `<span>${fmtDate(ctx.d[i])}</span><span><b>${fmtRate(ctx.v[i])}</b> ${b}</span>`;
+    readout.innerHTML = `<span>${fmtAxis(ctx.d[i], ctx.intra)}</span><span><b>${fmtRate(ctx.v[i])}</b> ${b}</span>`;
     if (e.cancelable) e.preventDefault();
   };
   const off = () => { g.style.display = 'none'; readout.innerHTML = ''; };
@@ -587,8 +648,10 @@ function wireCursor(ctx){
 }
 
 function drawRanges(){
-  el.ranges.innerHTML = RANGES.map((r) =>
-    `<button role="tab" data-r="${r.id}" aria-selected="${r.id === state.range}">${r.label}</button>`).join('');
+  el.ranges.innerHTML = RANGES
+    .filter((r) => !r.intraday || LIVE_URL)          // ohne Live-Quelle kein Intraday
+    .map((r) => `<button role="tab" data-r="${r.id}" aria-selected="${r.id === state.range}">${r.label}</button>`)
+    .join('');
 }
 el.ranges.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-r]');
@@ -596,7 +659,8 @@ el.ranges.addEventListener('click', (e) => {
   state.range = b.dataset.r;
   state.cursor = null;
   persist();
-  drawChart();
+  if (isIntraday() && (!state.intra || state.intraPair !== state.base + state.targets[0])) loadIntraday();
+  else drawChart();
 });
 let resizeT;
 window.addEventListener('resize', () => {
@@ -671,6 +735,7 @@ el.list.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.pick) closeSheet(); });
 
 // ---------- Start ----------
+if (!LIVE_URL && isIntraday()) state.range = '1M';
 useCache();
 drawRanges();
 render();
