@@ -27,20 +27,6 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
 
     const url = new URL(request.url);
-
-    // ?health=1 — sagt, ob das Secret ankommt, ohne es zu verraten
-    if (url.searchParams.has('health')){
-      const k = env.TD_KEY;
-      return json({
-        secret_gefunden: !!k,
-        laenge: k ? k.length : 0,
-        sieht_sauber_aus: k ? k === k.trim() : false,
-        hinweis: !k ? 'Secret heisst nicht TD_KEY oder Worker wurde nach dem Anlegen nicht neu deployed'
-               : k !== k.trim() ? 'Der Wert hat Leerzeichen oder einen Zeilenumbruch am Rand'
-               : 'Secret sieht gut aus — falls trotzdem 401, stimmt der Key selbst nicht',
-      }, 200, cors);
-    }
-
     const base = (url.searchParams.get('base') || 'CHF').toUpperCase().slice(0, 3);
     const symbols = (url.searchParams.get('symbols') || 'EUR')
       .toUpperCase().split(',').map((s) => s.trim().slice(0, 3))
@@ -65,20 +51,10 @@ export default {
     } catch {
       return json({ error: 'upstream unreachable' }, 502, cors);
     }
-    // Twelve Data schickt den Grund im Body mit — den reichen wir durch,
-    // sonst rätselt man bei 401 zwischen Key, Secret-Name und Tippfehler.
-    const raw = await upstream.text();
-    let d = null;
-    try{ d = JSON.parse(raw); }catch{}
+    if (!upstream.ok) return json({ error: 'upstream ' + upstream.status }, 502, cors);
 
-    if (!upstream.ok || (d && d.status === 'error')){
-      return json({
-        error: 'upstream ' + upstream.status,
-        upstream_meldung: (d && (d.message || d.error)) || raw.slice(0, 200),
-        key_vorhanden: !!env.TD_KEY,
-      }, 502, cors);
-    }
-    if (!d) return json({ error: 'upstream lieferte kein JSON' }, 502, cors);
+    const d = await upstream.json();
+    if (d.status === 'error') return json({ error: d.message || 'api error' }, 502, cors);
 
     // Einzelnes Paar -> flaches Objekt; mehrere -> nach "CHF/EUR" verschlüsselt
     const rates = {};
