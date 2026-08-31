@@ -65,6 +65,14 @@ Zeiträume sind Ausschnitte davon, also ohne weitere Requests. Es werden maximal
 Ohne Netz rechnet die App mit den letzten Kursen weiter; das Datum oben rechts
 zeigt den Stand, der Punkt wird rot ab 4 Tagen.
 
+## Bekannte Eigenheit im Live-Modus
+
+Die Live-Kurstabelle enthält nur die Basis und die Währungen in der Liste — mehr
+fragt der Worker gar nicht ab. Die Auswahlliste im Sheet stammt deshalb aus der
+Währungsnamen-Liste von Frankfurter, nicht aus der Kurstabelle. Ist diese Liste
+noch nie geladen worden (erster Start komplett offline), bleibt das Sheet leer;
+einmal online öffnen genügt.
+
 ## Änderungen
 
 Datei auf github.com bearbeiten, committen — und **`CACHE` in `sw.js` hochzählen**
