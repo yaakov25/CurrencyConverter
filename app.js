@@ -201,6 +201,7 @@ async function loadNames(){
     state.names = await r.json();
     save(KEY.names, state.names);
     render();
+    if (state.pick) drawPick(el.search.value);           // offenes Sheet nachziehen
   }catch{}
 }
 const rateOf = (a,b) => state.table[b] / state.table[a];
@@ -671,6 +672,7 @@ window.addEventListener('resize', () => {
 // ---------- Währungsauswahl ----------
 function openSheet(mode, code){
   state.pick = { mode, code };
+  if (!Object.keys(state.names).length) loadNames();     // Liste nachladen, falls leer
   el.removeCur.hidden = mode !== 'replace' || state.targets.length <= 1;
   el.sheet.classList.add('open');
   el.sheet.setAttribute('aria-hidden','false');
@@ -685,7 +687,10 @@ function closeSheet(){
   state.pick = null;
 }
 function drawPick(q){
-  const codes = Object.keys(state.table || state.names || {}).sort();
+  const codes = [...new Set([
+    ...Object.keys(state.names || {}),
+    ...Object.keys(state.table || {}),
+  ])].sort();
   const term = q.trim().toLowerCase();
   const cur = state.pick.mode === 'base' ? state.base : state.pick.code;
   el.picklist.innerHTML = codes
@@ -696,7 +701,9 @@ function drawPick(q){
         <span class="flag"><span>${flagChar(c)}</span></span>
         <span class="code">${c}</span><span class="sym">${SYM[c]||''}</span>
         <span class="n">${state.names[c]||''}</span></button>`;
-    }).join('') || '<p style="padding:20px 6px;color:var(--muted)">Keine Treffer.</p>';
+    }).join('') || `<p style="padding:20px 6px;color:var(--muted)">${
+      codes.length ? 'Keine Treffer.'
+                   : 'Währungsliste noch nicht geladen — kurz online gehen und erneut öffnen.'}</p>`;
 }
 el.search.addEventListener('input', () => drawPick(el.search.value));
 el.closeSheet.addEventListener('click', closeSheet);
